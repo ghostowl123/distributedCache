@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+type PolicyType int
+
+const (
+	LRU PolicyType = iota
+	LFU
+)
+
 type CacheItem[V any] struct {
 	Value      V
 	Expiration int64
@@ -18,14 +25,23 @@ type Cache[K comparable, V any] struct {
 	mu       sync.RWMutex
 }
 
-func NewCache[K comparable, V any](capacity int, cleanupInterval time.Duration) *Cache[K, V] {
-	c := &Cache[K, V]{
-		capacity: capacity,
-		policy:   policy.NewLRU[K, V](capacity),
-		data:     make(map[K]*CacheItem[V]),
+func NewCache[K comparable, V any](capacity int, cleanupInterval time.Duration, policyType PolicyType) *Cache[K, V] {
+	var cacheEvictPolicy policy.EvictionPolicy[K, V]
+	// Select the appropriate policy
+	switch policyType {
+	case LRU:
+		cacheEvictPolicy = policy.NewLRU[K, V](capacity)
+	case LFU:
+		cacheEvictPolicy = policy.NewLFU[K, V](capacity)
+	default:
+		panic("unknown cache policy")
 	}
 
-	return c
+	return &Cache[K, V]{
+		capacity: capacity,
+		policy:   cacheEvictPolicy,
+		data:     make(map[K]*CacheItem[V]),
+	}
 }
 
 func (c *Cache[K, V]) Set(key K, value V, ttl time.Duration) {
